@@ -5,6 +5,7 @@ package app.neara.android.ui.map
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -16,6 +17,8 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
+import android.os.Looper
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -46,24 +49,25 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import app.neara.android.AndroidAppState
-import app.neara.android.AndroidTab
 import app.neara.android.ui.*
 import app.neara.core.model.Peer
+import kotlinx.coroutines.delay
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
-import org.osmdroid.views.overlay.TilesOverlay
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import kotlin.math.cos
+import kotlin.math.sin
 
 @SuppressLint("MissingPermission")
 @Composable
 fun AndroidMapScreen(appState: AndroidAppState) {
     val context = LocalContext.current
     val discoveredPeers by appState.discoveredPeers.collectAsState()
-    val nearbyGroups by appState.nearbyGroups.collectAsState()
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -79,6 +83,15 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                 perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
 
+    // Check if phone location (GPS / Network) service is turned ON
+    var isPhoneLocationOn by remember {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+        val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+        mutableStateOf(gps || net)
+    }
+
+    // Periodic check for location provider status (updates dynamically when returning from settings)
     LaunchedEffect(Unit) {
         if (!hasLocationPermission) {
             permissionLauncher.launch(
@@ -88,42 +101,92 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                 )
             )
         }
+        while (true) {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+            val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+            isPhoneLocationOn = gps || net
+            hasLocationPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            delay(2000L)
+        }
     }
 
     // Default coordinate: Dhaka, Bangladesh or retrieved user location
     var userGeoPoint by remember { mutableStateOf(GeoPoint(23.8103, 90.4125)) }
     var locationAccuracy by remember { mutableStateOf<Float?>(null) }
+    var isRealLocationAcquired by remember { mutableStateOf(false) }
+    var hasCenteredOnRealLocation by remember { mutableStateOf(false) }
+
     var mapViewInstance by remember { mutableStateOf<MapView?>(null) }
     var isDarkMode by remember { mutableStateOf(true) }
     var showRadarRange by remember { mutableStateOf(true) }
     var selectedPeer by remember { mutableStateOf<Peer?>(null) }
 
-    // Fetch GPS / Network location
-    DisposableEffect(hasLocationPermission) {
-        if (hasLocationPermission) {
+    // Real-Time GPS & Network Location Tracking
+    DisposableEffect(hasLocationPermission, isPhoneLocationOn) {
+        if (hasLocationPermission && isPhoneLocationOn) {
             val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             val listener = object : LocationListener {
                 override fun onLocationChanged(loc: Location) {
                     val gp = GeoPoint(loc.latitude, loc.longitude)
                     userGeoPoint = gp
                     locationAccuracy = loc.accuracy
+                    isRealLocationAcquired = true
+
+                    // Auto-pan to user's real location upon first live GPS fix
+                    if (!hasCenteredOnRealLocation) {
+                        hasCenteredOnRealLocation = true
+                        mapViewInstance?.controller?.animateTo(gp, 17.0, 900L)
+                    }
                 }
                 override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-                override fun onProviderEnabled(provider: String) {}
-                override fun onProviderDisabled(provider: String) {}
+                override fun onProviderEnabled(provider: String) {
+                    isPhoneLocationOn = true
+                }
+                override fun onProviderDisabled(provider: String) {
+                    val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+                    val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+                    isPhoneLocationOn = gps || net
+                }
             }
 
             try {
-                lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let {
-                    userGeoPoint = GeoPoint(it.latitude, it.longitude)
-                    locationAccuracy = it.accuracy
-                } ?: lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let {
-                    userGeoPoint = GeoPoint(it.latitude, it.longitude)
-                    locationAccuracy = it.accuracy
+                // Get the freshest last known location
+                var bestLocation: Location? = null
+                val providers = listOf(
+                    LocationManager.GPS_PROVIDER,
+                    LocationManager.NETWORK_PROVIDER,
+                    LocationManager.PASSIVE_PROVIDER
+                )
+                for (p in providers) {
+                    try {
+                        val l = lm?.getLastKnownLocation(p)
+                        if (l != null && (bestLocation == null || l.time > bestLocation.time)) {
+                            bestLocation = l
+                        }
+                    } catch (e: Exception) {}
                 }
 
-                lm?.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000L, 10f, listener)
-                lm?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 10f, listener)
+                bestLocation?.let {
+                    val gp = GeoPoint(it.latitude, it.longitude)
+                    userGeoPoint = gp
+                    locationAccuracy = it.accuracy
+                    isRealLocationAcquired = true
+                    if (!hasCenteredOnRealLocation) {
+                        hasCenteredOnRealLocation = true
+                        mapViewInstance?.controller?.setCenter(gp)
+                        mapViewInstance?.controller?.setZoom(17.0)
+                    }
+                }
+
+                // Register fast high-accuracy location listener
+                if (lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
+                    lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1.0f, listener, Looper.getMainLooper())
+                }
+                if (lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
+                    lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 1.0f, listener, Looper.getMainLooper())
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -139,7 +202,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BgDark)) {
-        // Native OpenStreetMap View
+        // Native OpenStreetMap View with Real Location Tracking
         AndroidView(
             factory = { ctx ->
                 Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
@@ -149,8 +212,19 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true
-                    controller.setZoom(16.0)
+                    controller.setZoom(17.0)
                     controller.setCenter(userGeoPoint)
+
+                    // Real-time GPS overlay provider
+                    val gpsProvider = GpsMyLocationProvider(ctx).apply {
+                        locationUpdateMinTime = 1000L
+                        locationUpdateMinDistance = 1.0f
+                    }
+                    val myLocOverlay = MyLocationNewOverlay(gpsProvider, this).apply {
+                        enableMyLocation()
+                        setDrawAccuracyEnabled(true)
+                    }
+                    overlays.add(myLocOverlay)
 
                     // Apply Cyberpunk Dark Invert filter by default
                     if (isDarkMode) {
@@ -169,9 +243,11 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                 }
             },
             update = { map ->
-                map.overlays.clear()
+                // Clear dynamic markers while preserving base overlays
+                val toRemove = map.overlays.filter { it is Marker || it is Polygon }
+                map.overlays.removeAll(toRemove)
 
-                // Radar rings around local node
+                // Radar mesh coverage rings around user's real location
                 if (showRadarRange) {
                     val ranges = listOf(50.0, 100.0, 200.0)
                     for (r in ranges) {
@@ -189,7 +265,11 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                 val userMarker = Marker(map).apply {
                     position = userGeoPoint
                     title = "You (${appState.cryptoEngine.localIdentity.displayName})"
-                    snippet = "Host Node • IP: ${appState.localIpAddress}"
+                    snippet = if (isRealLocationAcquired) {
+                        "Real GPS Location • Accuracy: ±${locationAccuracy?.toInt() ?: 10}m"
+                    } else {
+                        "Host Node • IP: ${appState.localIpAddress}"
+                    }
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     icon = createPulsingNodeIcon(context, isHost = true, name = "You")
                     setOnMarkerClickListener { _, _ ->
@@ -199,14 +279,13 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                 }
                 map.overlays.add(userMarker)
 
-                // 2. Discovered Peer Markers
-                discoveredPeers.forEachIndexed { idx, peer ->
-                    // Calculate deterministic mock offset (within 40-150m) around user for visual mesh representation
+                // 2. Discovered Peer Markers positioned in mesh proximity
+                discoveredPeers.forEach { peer ->
                     val hash = peer.peerId.hashCode()
                     val angle = Math.toRadians((hash % 360).toDouble().let { if (it < 0) it + 360 else it })
-                    val distanceMeters = 40.0 + ((hash and 0x7F) % 90)
+                    val distanceMeters = 35.0 + ((hash and 0x7F) % 85)
                     val latOffset = (distanceMeters / 111320.0) * cos(angle)
-                    val lonOffset = (distanceMeters / (111320.0 * cos(Math.toRadians(userGeoPoint.latitude)))) * kotlin.math.sin(angle)
+                    val lonOffset = (distanceMeters / (111320.0 * cos(Math.toRadians(userGeoPoint.latitude)))) * sin(angle)
                     val peerPoint = GeoPoint(userGeoPoint.latitude + latOffset, userGeoPoint.longitude + lonOffset)
 
                     val peerMarker = Marker(map).apply {
@@ -228,62 +307,149 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Top Status Floating Bar
-        Row(
+        // Top Status & Warning Banners
+        Column(
             modifier = Modifier
                 .statusBarsPadding()
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Free OpenStreetMap Badge
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(BgCard.copy(alpha = 0.92f))
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(AccentEmerald)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "🗺️ OpenStreetMap (Free)",
-                        color = TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+            // Warning 1: Phone Location (GPS) is turned OFF
+            if (!isPhoneLocationOn) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.8f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.LocationOff,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Phone Location is OFF", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Turn on GPS for live real location tracking", color = TextSecondary, fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Turn On", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
 
-            // Peers Count Badge
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(BgCard.copy(alpha = 0.92f))
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
+            // Warning 2: Location permission missing
+            if (!hasLocationPermission) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    border = BorderStroke(1.dp, AccentDanger.copy(alpha = 0.8f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            tint = AccentDanger,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Location Permission Needed", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Allow location permission to show your position", color = TextSecondary, fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentDanger),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Allow", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
+            // Floating Header Badges
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.WifiTethering,
-                        contentDescription = null,
-                        tint = AccentCyan,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "${discoveredPeers.size} Active Nodes",
-                        color = AccentCyan,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                // Free OpenStreetMap / GPS Status Badge
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(BgCard.copy(alpha = 0.92f))
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (isRealLocationAcquired) AccentEmerald else Color(0xFFF59E0B))
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (isRealLocationAcquired) "🛰️ GPS Real Location" else "🗺️ OpenStreetMap (Free)",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // Peers Count Badge
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(BgCard.copy(alpha = 0.92f))
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.WifiTethering,
+                            contentDescription = null,
+                            tint = AccentCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "${discoveredPeers.size} Active Nodes",
+                            color = AccentCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -296,13 +462,35 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // GPS Center on User
+            // GPS Center on Real Location
             FloatingMapButton(
                 icon = Icons.Default.MyLocation,
-                contentDescription = "Center on My Location",
-                tint = AccentEmerald,
+                contentDescription = "Center on Real Location",
+                tint = if (isRealLocationAcquired) AccentEmerald else Color(0xFFF59E0B),
                 onClick = {
-                    mapViewInstance?.controller?.animateTo(userGeoPoint, 16.5, 1000L)
+                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                    val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+                    val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+                    if (!gps && !net) {
+                        // Prompt user to turn on GPS in settings
+                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    } else {
+                        // Immediately fetch fresh last known location
+                        var freshLoc: Location? = null
+                        for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
+                            try {
+                                val l = lm?.getLastKnownLocation(p)
+                                if (l != null && (freshLoc == null || l.time > freshLoc.time)) {
+                                    freshLoc = l
+                                }
+                            } catch (e: Exception) {}
+                        }
+                        freshLoc?.let {
+                            userGeoPoint = GeoPoint(it.latitude, it.longitude)
+                            isRealLocationAcquired = true
+                        }
+                        mapViewInstance?.controller?.animateTo(userGeoPoint, 17.5, 900L)
+                    }
                 }
             )
 
