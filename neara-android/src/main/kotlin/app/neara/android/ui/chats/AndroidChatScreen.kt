@@ -52,8 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.core.content.ContextCompat
 import app.neara.android.AndroidAppState
 import app.neara.android.AndroidTab
@@ -913,8 +916,21 @@ private fun LocationPickerDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
+        val view = LocalView.current
+        SideEffect {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1051,13 +1067,13 @@ private fun LocationPickerDialog(
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 14.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 28.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF1A1F2E))
-                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(18.dp))
+                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(20.dp))
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp)
+                    modifier = Modifier.padding(16.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -1090,13 +1106,13 @@ private fun LocationPickerDialog(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
                             .background(AccentEmerald)
                             .clickable { onSendLocation(pickedLat, pickedLon) },
                         contentAlignment = Alignment.Center
