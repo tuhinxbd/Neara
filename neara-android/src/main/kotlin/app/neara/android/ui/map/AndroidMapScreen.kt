@@ -23,6 +23,7 @@ import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,9 +60,8 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.gestures.RotationGestureOverlay
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
@@ -126,6 +127,36 @@ fun AndroidMapScreen(appState: AndroidAppState) {
     var isDarkMode by remember { mutableStateOf(true) }
     var showRadarRange by remember { mutableStateOf(true) }
     var selectedPeer by remember { mutableStateOf<Peer?>(null) }
+    // Live compass: continuous (unwrapped) angle to avoid 359°→0° jump
+    var continuousOrientation by remember { mutableStateOf(0f) }
+    var lastRawOrientation by remember { mutableStateOf(0f) }
+
+    // Smooth animated compass bearing
+    val animatedOrientation by animateFloatAsState(
+        targetValue = continuousOrientation,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "compass"
+    )
+
+    // Poll map bearing at 50ms — compute shortest-path delta to stay continuous
+    LaunchedEffect(mapViewInstance) {
+        while (true) {
+            val raw = mapViewInstance?.mapOrientation ?: lastRawOrientation
+            var delta = raw - lastRawOrientation
+            if (delta > 180f) delta -= 360f
+            if (delta < -180f) delta += 360f
+            continuousOrientation += delta
+            lastRawOrientation = raw
+            delay(50L)
+        }
+    }
+
+    // Normalize for display: true bearing mod 360
+    val displayOrientation = ((animatedOrientation % 360f) + 360f) % 360f
+    val compassVisible = displayOrientation > 0.5f || displayOrientation < 359.5f
 
     // Real-Time GPS & Network Location Tracking
     DisposableEffect(hasLocationPermission, isPhoneLocationOn) {
@@ -226,21 +257,11 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                         false
                     }
 
-                    // Touch on map to move position
-                    val mapEventsReceiver = object : MapEventsReceiver {
-                        override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
-                            selectedPeer = null
-                            controller.animateTo(p)
-                            return true
-                        }
-
-                        override fun longPressHelper(p: GeoPoint): Boolean {
-                            userGeoPoint = p
-                            controller.animateTo(p)
-                            return true
-                        }
+                    // Two-finger rotation (Google Maps style)
+                    val rotationGesture = RotationGestureOverlay(this).apply {
+                        isEnabled = true
                     }
-                    overlays.add(0, MapEventsOverlay(mapEventsReceiver))
+                    overlays.add(rotationGesture)
 
                     controller.setZoom(17.0)
                     controller.setCenter(userGeoPoint)
@@ -484,7 +505,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             }
         }
 
-        // Top-Right Side Quick Controls (Theme & Radar rings)
+        // Top-Right Side Quick Controls (Compass, Theme & Radar rings)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -492,6 +513,37 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Compass — smooth rotation, tap resets north (Google Maps style)
+            AnimatedVisibility(
+                visible = compassVisible,
+                enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.6f),
+                exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.6f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .shadow(8.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(BgCard.copy(alpha = 0.97f))
+                        .border(1.5.dp, Color(0xFFEF4444).copy(alpha = 0.6f), CircleShape)
+                        .clickable {
+                            mapViewInstance?.setMapOrientation(0f)
+                            continuousOrientation = 0f
+                            lastRawOrientation = 0f
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Explore,
+                        contentDescription = "Reset North",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .graphicsLayer { rotationZ = -animatedOrientation }
+                    )
+                }
+            }
+
             // Toggle Dark / Standard Map
             FloatingMapButton(
                 icon = if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
@@ -541,33 +593,38 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // GPS Center on Real Location
+            // GPS Center on Real Location — always snaps to current position
             FloatingMapButton(
                 icon = Icons.Default.MyLocation,
                 contentDescription = "Center on Real Location",
                 tint = if (isRealLocationAcquired) AccentEmerald else Color(0xFFF59E0B),
                 onClick = {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-                    val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
-                    val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
-                    if (!gps && !net) {
+                    // If phone location is completely off, open settings
+                    if (!isPhoneLocationOn) {
                         context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                    } else {
-                        var freshLoc: Location? = null
-                        for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
-                            try {
-                                val l = lm?.getLastKnownLocation(p)
-                                if (l != null && (freshLoc == null || l.time > freshLoc.time)) {
-                                    freshLoc = l
-                                }
-                            } catch (e: Exception) {}
-                        }
-                        freshLoc?.let {
-                            userGeoPoint = GeoPoint(it.latitude, it.longitude)
-                            isRealLocationAcquired = true
-                        }
-                        mapViewInstance?.controller?.animateTo(userGeoPoint, 17.5, 800L)
+                        return@FloatingMapButton
                     }
+
+                    // Try to grab the freshest available location snapshot
+                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                    var freshLoc: Location? = null
+                    for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)) {
+                        try {
+                            val l = lm?.getLastKnownLocation(p)
+                            if (l != null && (freshLoc == null || l.time > freshLoc.time)) {
+                                freshLoc = l
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // Update userGeoPoint with the freshest fix if available
+                    freshLoc?.let {
+                        userGeoPoint = GeoPoint(it.latitude, it.longitude)
+                        isRealLocationAcquired = true
+                    }
+
+                    // Always animate to current position (wherever userGeoPoint is now)
+                    mapViewInstance?.controller?.animateTo(userGeoPoint, 17.5, 800L)
                 }
             )
 

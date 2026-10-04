@@ -6,6 +6,7 @@ package app.neara.android.ui
 
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -13,6 +14,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -68,6 +72,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.views.overlay.Marker
 
 @Composable
 fun AndroidChatScreen(appState: AndroidAppState) {
@@ -86,6 +96,7 @@ fun AndroidChatScreen(appState: AndroidAppState) {
     var pendingBase64List by remember { mutableStateOf<List<String>>(emptyList()) }
     var pendingCaptionText by remember { mutableStateOf("") }
     var showSendImageDialog by remember { mutableStateOf(false) }
+    var showLocationPicker by remember { mutableStateOf(false) }
 
     val voiceRecorder = remember { VoiceRecorder(context) }
     var isRecordingVoice by remember { mutableStateOf(false) }
@@ -535,12 +546,14 @@ fun AndroidChatScreen(appState: AndroidAppState) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(26.dp))
                         .background(BgCard)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(24.dp))
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(26.dp))
                         .padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // ── LEFT ICONS: Image · Mic · Location ──────────────────
+                    // Image picker
                     IconButton(
                         onClick = { imagePickerLauncher.launch("image/*") },
                         modifier = Modifier.size(36.dp)
@@ -553,14 +566,65 @@ fun AndroidChatScreen(appState: AndroidAppState) {
                             )
                         } else {
                             Icon(
-                                Icons.Default.AddPhotoAlternate,
+                                Icons.Default.Image,
                                 contentDescription = "Attach image",
-                                tint = AccentEmerald,
+                                tint = TextSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
+                    // Mic — tap to start/stop recording
+                    IconButton(
+                        onClick = {
+                            if (isRecordingVoice) {
+                                stopAndSendVoiceRecording()
+                            } else {
+                                val hasMicPermission = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (hasMicPermission) {
+                                    startVoiceRecording()
+                                } else {
+                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            if (isRecordingVoice) Icons.Default.Stop else Icons.Default.Mic,
+                            contentDescription = if (isRecordingVoice) "Stop recording" else "Record voice",
+                            tint = if (isRecordingVoice) AccentDanger else TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Location — open map picker (Messenger style)
+                    IconButton(
+                        onClick = { showLocationPicker = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = "Share location",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Thin divider line between left icons and text field
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(22.dp)
+                            .background(BorderSubtle)
+                    )
+
+                    Spacer(Modifier.width(2.dp))
+
+                    // ── RIGHT: TextField + Send ──────────────────────────────
                     TextField(
                         value = textInput,
                         onValueChange = { textInput = it },
@@ -584,48 +648,29 @@ fun AndroidChatScreen(appState: AndroidAppState) {
                         modifier = Modifier.weight(1f)
                     )
 
+                    // Send button — only show when text is typed
                     if (textInput.isNotBlank()) {
                         IconButton(
                             onClick = {
-                                if (textInput.isNotBlank()) {
-                                    appState.sendTextMessage(textInput.trim())
-                                    textInput = ""
-                                }
+                                appState.sendTextMessage(textInput.trim())
+                                textInput = ""
                             },
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(AccentEmerald)
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Send",
-                                tint = AccentEmerald,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    } else {
-                        IconButton(
-                            onClick = {
-                                val hasMicPermission = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (hasMicPermission) {
-                                    startVoiceRecording()
-                                } else {
-                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Mic,
-                                contentDescription = "Record voice",
-                                tint = AccentEmerald,
-                                modifier = Modifier.size(22.dp)
+                                tint = Color.Black,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
             }
+
         }
     }
 
@@ -807,6 +852,264 @@ fun AndroidChatScreen(appState: AndroidAppState) {
                             contentDescription = "Send photo",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Messenger-style Location Picker Fullscreen Overlay ─────────────────
+    if (showLocationPicker) {
+        LocationPickerDialog(
+            onDismiss = { showLocationPicker = false },
+            onSendLocation = { lat, lon ->
+                val latStr = String.format("%.6f", lat)
+                val lonStr = String.format("%.6f", lon)
+                appState.sendTextMessage("📍 Location: $latStr, $lonStr\nhttps://maps.google.com/?q=$latStr,$lonStr")
+                showLocationPicker = false
+            }
+        )
+    }
+}
+
+@SuppressLint("MissingPermission", "ClickableViewAccessibility")
+@Composable
+private fun LocationPickerDialog(
+    onDismiss: () -> Unit,
+    onSendLocation: (lat: Double, lon: Double) -> Unit
+) {
+    val context = LocalContext.current
+
+    // Get current GPS location as starting point
+    var pickedLat by remember { mutableStateOf(23.8103) }
+    var pickedLon by remember { mutableStateOf(90.4125) }
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var hasGotGps by remember { mutableStateOf(false) }
+
+    // Try to get real location on first compose
+    LaunchedEffect(Unit) {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        var best: android.location.Location? = null
+        for (p in listOf(
+            android.location.LocationManager.GPS_PROVIDER,
+            android.location.LocationManager.NETWORK_PROVIDER,
+            android.location.LocationManager.PASSIVE_PROVIDER
+        )) {
+            try {
+                val l = lm?.getLastKnownLocation(p)
+                if (l != null && (best == null || l.time > best.time)) best = l
+            } catch (_: Exception) {}
+        }
+        best?.let {
+            pickedLat = it.latitude
+            pickedLon = it.longitude
+            hasGotGps = true
+            mapViewRef?.controller?.animateTo(GeoPoint(it.latitude, it.longitude), 17.0, 500L)
+        }
+    }
+
+    BackHandler { onDismiss() }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BgDark)
+        ) {
+            // OSMDroid Map
+            AndroidView(
+                factory = { ctx ->
+                    Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+                    Configuration.getInstance().userAgentValue = "Neara/1.0 (Android; Location-Picker)"
+
+                    MapView(ctx).apply {
+                        setTileSource(TileSourceFactory.MAPNIK)
+                        setMultiTouchControls(true)
+                        isTilesScaledToDpi = true
+                        zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+
+                        // Disallow parent scrolling
+                        setOnTouchListener { v, event ->
+                            v.parent?.requestDisallowInterceptTouchEvent(true)
+                            false
+                        }
+
+                        controller.setZoom(17.0)
+                        controller.setCenter(GeoPoint(pickedLat, pickedLon))
+
+                        // Dark theme filter
+                        val inverseMatrix = ColorMatrix(
+                            floatArrayOf(
+                                -0.85f, 0f, 0f, 0f, 240f,
+                                0f, -0.85f, 0f, 0f, 245f,
+                                0f, 0f, -0.85f, 0f, 255f,
+                                0f, 0f, 0f, 1f, 0f
+                            )
+                        )
+                        overlayManager.tilesOverlay.setColorFilter(ColorMatrixColorFilter(inverseMatrix))
+
+                        mapViewRef = this
+                    }
+                },
+                update = { map ->
+                    // Update picked location from map center
+                    val center = map.mapCenter
+                    pickedLat = center.latitude
+                    pickedLon = center.longitude
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Center pin (always stays in exact center of the map)
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(44.dp)
+                    )
+                    // Small shadow dot under pin
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp, 4.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.3f))
+                    )
+                }
+            }
+
+            // Top bar: Close + Title
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(BgDark.copy(alpha = 0.9f))
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                    .align(Alignment.TopCenter),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = TextPrimary)
+                }
+                Spacer(Modifier.width(4.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Share Location",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                    Text(
+                        "Drag map to adjust pin",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
+
+                // Center on GPS button
+                IconButton(
+                    onClick = {
+                        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+                        var best: android.location.Location? = null
+                        for (p in listOf(
+                            android.location.LocationManager.GPS_PROVIDER,
+                            android.location.LocationManager.NETWORK_PROVIDER
+                        )) {
+                            try {
+                                val l = lm?.getLastKnownLocation(p)
+                                if (l != null && (best == null || l.time > best.time)) best = l
+                            } catch (_: Exception) {}
+                        }
+                        best?.let {
+                            pickedLat = it.latitude
+                            pickedLon = it.longitude
+                            mapViewRef?.controller?.animateTo(GeoPoint(it.latitude, it.longitude), 17.5, 600L)
+                        }
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.MyLocation,
+                        contentDescription = "Center GPS",
+                        tint = AccentEmerald
+                    )
+                }
+            }
+
+            // Bottom card: coordinates + send button
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = BgCard),
+                border = BorderStroke(1.dp, BorderSubtle)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEF4444).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Selected Location",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "${String.format("%.6f", pickedLat)}, ${String.format("%.6f", pickedLon)}",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = { onSendLocation(pickedLat, pickedLon) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentEmerald)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Send Location",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
                         )
                     }
                 }

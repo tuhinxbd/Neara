@@ -68,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable
 fun AndroidMessageBubble(
@@ -802,6 +803,232 @@ fun AndroidMessageBubble(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(timeStr, color = TextMuted, fontSize = 10.sp)
+                    }
+                }
+            } else if (msg.payload.startsWith("📍 Location:")) {
+                // ── Messenger-Style Location Card Bubble ──────────────────────
+                val locationLine = msg.payload.lines().firstOrNull() ?: ""
+                val coordsPart = locationLine.removePrefix("📍 Location:").trim()
+                val lat = coordsPart.substringBefore(",").trim().toDoubleOrNull() ?: 0.0
+                val lon = coordsPart.substringAfter(",").trim().toDoubleOrNull() ?: 0.0
+                val mapsUrl = "https://maps.google.com/?q=$lat,$lon"
+
+                Column(
+                    horizontalAlignment = if (isSelf) Alignment.End else Alignment.Start,
+                    modifier = Modifier.padding(bottom = if (hasReactions) 12.dp else 4.dp)
+                ) {
+                    if (!isSelf) {
+                        Text(
+                            senderName,
+                            color = AccentCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    // Card container — no time inside
+                    Box(
+                        modifier = Modifier
+                            .width(240.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color(0xFF1E2530))
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
+                            .combinedClickable(
+                                onClick = { },
+                                onLongClick = { showActionSheet = true }
+                            )
+                    ) {
+                        Column {
+                            // Mini map thumbnail
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(130.dp)
+                                    .clip(RoundedCornerShape(topStart = 17.dp, topEnd = 17.dp))
+                            ) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        org.osmdroid.config.Configuration.getInstance()
+                                            .load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+                                        org.osmdroid.views.MapView(ctx).apply {
+                                            setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                                            setMultiTouchControls(false)
+                                            isClickable = false
+                                            isFocusable = false
+                                            zoomController.setVisibility(
+                                                org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER
+                                            )
+                                            controller.setZoom(15.0)
+                                            controller.setCenter(org.osmdroid.util.GeoPoint(lat, lon))
+                                            val m = android.graphics.ColorMatrix(floatArrayOf(
+                                                -0.85f, 0f, 0f, 0f, 240f,
+                                                0f, -0.85f, 0f, 0f, 245f,
+                                                0f, 0f, -0.85f, 0f, 255f,
+                                                0f, 0f, 0f, 1f, 0f
+                                            ))
+                                            overlayManager.tilesOverlay.setColorFilter(
+                                                android.graphics.ColorMatrixColorFilter(m)
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                // Center red pin
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(36.dp).offset(y = (-8).dp)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.07f))
+                                )
+                            }
+
+                            // Info row
+                            Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFEF4444).copy(alpha = 0.18f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = Color(0xFFEF4444),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            "Pinned location",
+                                            color = TextPrimary,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            "${String.format("%.5f", lat)}, ${String.format("%.5f", lon)}",
+                                            color = TextMuted,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(10.dp))
+
+                                // Two buttons side by side: In App | Google Maps
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    // Open in App
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(AccentEmerald.copy(alpha = 0.13f))
+                                            .border(1.dp, AccentEmerald.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                appState.setTab(app.neara.android.AndroidTab.MAP)
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Map,
+                                                contentDescription = null,
+                                                tint = AccentEmerald,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                "In App",
+                                                color = AccentEmerald,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+
+                                    // Open in Google Maps
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF0084FF).copy(alpha = 0.13f))
+                                            .border(1.dp, Color(0xFF0084FF).copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(mapsUrl))
+                                                    context.startActivity(intent)
+                                                } catch (_: Exception) {}
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Public,
+                                                contentDescription = null,
+                                                tint = Color(0xFF0084FF),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                "Google",
+                                                color = Color(0xFF0084FF),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Time + status — OUTSIDE the card, below it
+                    Spacer(Modifier.height(3.dp))
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(timeStr, color = TextMuted, fontSize = 10.sp)
+                        if (isSelf) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                when (msg.status) {
+                                    MessageStatus.PENDING -> "⏱"
+                                    MessageStatus.SENDING -> "⏳"
+                                    MessageStatus.SENT -> "✓"
+                                    MessageStatus.DELIVERED, MessageStatus.READ -> "✓✓"
+                                    MessageStatus.FAILED -> "⚠"
+                                },
+                                color = TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
             } else {
