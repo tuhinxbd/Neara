@@ -1045,14 +1045,14 @@ private fun LocationPickerDialog(
             }
 
             // Bottom card: coordinates + send button
-            Card(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(12.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = BgCard),
-                border = BorderStroke(1.dp, BorderSubtle)
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFF1A1F2E))
+                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(18.dp))
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp)
@@ -1090,27 +1090,30 @@ private fun LocationPickerDialog(
 
                     Spacer(Modifier.height(12.dp))
 
-                    Button(
-                        onClick = { onSendLocation(pickedLat, pickedLon) },
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentEmerald)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AccentEmerald)
+                            .clickable { onSendLocation(pickedLat, pickedLon) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Send Location",
-                            color = Color.Black,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Send Location",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                        }
                     }
                 }
             }
