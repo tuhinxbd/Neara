@@ -46,3 +46,25 @@ The project is structured into 8 modular Kotlin components following Clean Archi
 - **Offline First**: If a destination peer goes offline, messages are stored in SQLite and automatically delivered with retry logic when the peer reappears on the local network.
 - **Privacy Controls**: Users can toggle between `Visible` and `Invisible (Silent)` discovery modes anytime.
 - **Secure QR Codes**: QR codes contain only minimal public key fingerprints and rendezvous metadata (`neara://join?netId=...`), never transmitting raw passwords or master keys over plaintext.
+
+---
+
+## 👨‍💻 Author & Maintainer
+
+- **Developer**: Tuhin
+- **GitHub**: [@tuhinxbd](https://github.com/tuhinxbd)
+- **Project Repository**: [https://github.com/tuhinxbd/Neara](https://github.com/tuhinxbd/Neara)
+
+---
+
+## 📄 License & Restrictions
+
+This software is licensed under the **Neara Source-Available Non-Commercial & Attribution License**.
+
+- ❌ **No Commercial Use / No Selling**: You may **NOT** sell, rent, monetize, or charge any fee for this software, compiled APKs/binaries, or any derivative works.
+- ❌ **No Rebranding as Original**: You may **NOT** remove or alter the author's name (**Tuhin / tuhinxbd**) or claim this project as your own creation.
+- ⚖️ **Mandatory Attribution**: All forks, copies, and modifications must clearly state original authorship and link back to [https://github.com/tuhinxbd/Neara](https://github.com/tuhinxbd/Neara).
+- 🔄 **ShareAlike**: Modified versions must carry the exact same license terms.
+
+See the full [LICENSE](LICENSE) file for complete legal terms.
+
