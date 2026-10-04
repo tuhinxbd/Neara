@@ -295,7 +295,30 @@ class AndroidAppState(
         dismissedNetworks.remove(net.networkId)
         saveChatPrefs()
         refreshConversations()
+        postSystemEvent(net.networkId, "${cryptoEngine.localIdentity.displayName} created the group.")
         return net
+    }
+
+    fun postSystemEvent(networkId: String, text: String) {
+        val msg = ChatMessage(
+            messageId = "event-${UUID.randomUUID().toString().take(8)}",
+            conversationId = networkId,
+            senderId = localPeerId,
+            recipientId = null,
+            timestamp = System.currentTimeMillis(),
+            sequenceNumber = System.currentTimeMillis(),
+            type = MessageType.SYSTEM,
+            payload = "EVENT:$text",
+            status = MessageStatus.READ
+        )
+        scope.launch {
+            messageRepository.saveMessage(msg)
+            chatService.sendMessage(msg)
+            withContext(Dispatchers.Main) {
+                refreshActiveMessages()
+                refreshConversations()
+            }
+        }
     }
 
     private fun acquireMulticastLock() {
@@ -540,6 +563,7 @@ class AndroidAppState(
                 selectNetworkConversation(finalNet)
                 refreshConversations()
                 Toast.makeText(context, "Joined ${finalNet.name}!", Toast.LENGTH_SHORT).show()
+                postSystemEvent(finalNet.networkId, "${cryptoEngine.localIdentity.displayName} joined the group.")
             }
         }
     }
@@ -603,6 +627,8 @@ class AndroidAppState(
                             else -> "📞 Audio call"
                         }
                     }
+                    lastMsg.payload.startsWith("EVENT:") -> lastMsg.payload.removePrefix("EVENT:")
+                    lastMsg.payload.startsWith("SYS_EVENT:") -> lastMsg.payload.removePrefix("SYS_EVENT:")
                     else -> lastMsg.payload
                 }
                 items.add(
@@ -717,14 +743,19 @@ class AndroidAppState(
     }
 
     fun removeGroupMember(networkId: String, memberPeerId: String): Boolean {
+        val memberName = getSenderDisplayName(memberPeerId).let { if (it == "You") memberPeerId else it }
         val success = networkManager.removeMember(networkId, memberPeerId, localPeerId)
         if (activeConversationNetwork.value?.networkId == networkId) {
             activeConversationNetwork.value = networkManager.getNetwork(networkId)
+        }
+        if (success) {
+            postSystemEvent(networkId, "${cryptoEngine.localIdentity.displayName} removed $memberName from the group.")
         }
         return success
     }
 
     fun leaveGroup(networkId: String) {
+        postSystemEvent(networkId, "${cryptoEngine.localIdentity.displayName} left the group.")
         networkManager.leaveNetwork(networkId, localPeerId)
         networkManager.deleteNetwork(networkId)
         messageRepository.deleteConversation(networkId)
@@ -773,14 +804,21 @@ class AndroidAppState(
         if (activeConversationNetwork.value?.networkId == networkId) {
             activeConversationNetwork.value = networkManager.getNetwork(networkId)
         }
+        if (success) {
+            postSystemEvent(networkId, "${cryptoEngine.localIdentity.displayName} added ${peer.displayName} to the group.")
+        }
         refreshConversations()
         return success
     }
 
     fun approveJoinRequest(networkId: String, applicantPeerId: String): Boolean {
+        val applicantName = getSenderDisplayName(applicantPeerId).let { if (it == "You") applicantPeerId else it }
         val success = networkManager.approveJoinRequest(networkId, applicantPeerId, localPeerId)
         if (activeConversationNetwork.value?.networkId == networkId) {
             activeConversationNetwork.value = networkManager.getNetwork(networkId)
+        }
+        if (success) {
+            postSystemEvent(networkId, "${cryptoEngine.localIdentity.displayName} added $applicantName to the group.")
         }
         refreshConversations()
         return success

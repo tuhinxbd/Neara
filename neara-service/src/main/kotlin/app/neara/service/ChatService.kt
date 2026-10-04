@@ -274,7 +274,7 @@ class ChatService(
                     timestamp = System.currentTimeMillis(),
                     sequenceNumber = System.currentTimeMillis(),
                     type = MessageType.SYSTEM,
-                    payload = "${req.applicantDisplayName} joined the group",
+                    payload = "${req.applicantDisplayName} joined the group.",
                     status = MessageStatus.SENT
                 )
                 messageRepository.saveMessage(sysMsg)
