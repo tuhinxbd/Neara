@@ -41,3 +41,6 @@ proguard/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Internal documents
+PRD.md
