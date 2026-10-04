@@ -38,24 +38,6 @@
 
 ---
 
-## 🏗 Architecture & Modules
-
-Neara is structured into clean, decoupled multiplatform modules:
-
-| Module | Description |
-| :--- | :--- |
-| **`neara-android`** | Jetpack Compose Android client with modern Messenger-style UI, calls, and animated splash screen. |
-| **`neara-desktop`** | Compose Multiplatform desktop application for Windows, macOS, and Linux. |
-| **`neara-core`** | Domain models (`Peer`, `ChatMessage`, `Network`), interfaces, and business entities. |
-| **`neara-crypto`** | Industrial cryptography engine with zero hardcoded keys. |
-| **`neara-protocol`** | Binary wire framing protocol with packet versioning and stream codecs. |
-| **`neara-discovery`** | UDP multicast discovery, peer presence detection, and heartbeat sweeps. |
-| **`neara-transport`** | Low-latency TCP framed socket server and client connection pooling. |
-| **`neara-storage`** | Local-first message persistence and offline delivery queue. |
-| **`neara-service`** | Application orchestrator: `ChatService`, `NetworkManager`, `VoiceService`, and `MeshRouter`. |
-
----
-
 ## 🚀 Building & Running
 
 ### Prerequisites
