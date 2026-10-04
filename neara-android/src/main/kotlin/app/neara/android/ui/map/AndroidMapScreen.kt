@@ -57,6 +57,9 @@ import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
@@ -215,19 +218,29 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                     isTilesScaledToDpi = true
                     isClickable = true
                     isFocusable = true
+                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
 
                     // Enable free dragging and disallow parent interception
                     setOnTouchListener { v, event ->
-                        when (event.action) {
-                            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                                v.parent?.requestDisallowInterceptTouchEvent(true)
-                            }
-                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                v.parent?.requestDisallowInterceptTouchEvent(false)
-                            }
-                        }
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
                         false
                     }
+
+                    // Touch on map to move position
+                    val mapEventsReceiver = object : MapEventsReceiver {
+                        override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                            selectedPeer = null
+                            controller.animateTo(p)
+                            return true
+                        }
+
+                        override fun longPressHelper(p: GeoPoint): Boolean {
+                            userGeoPoint = p
+                            controller.animateTo(p)
+                            return true
+                        }
+                    }
+                    overlays.add(0, MapEventsOverlay(mapEventsReceiver))
 
                     controller.setZoom(17.0)
                     controller.setCenter(userGeoPoint)
