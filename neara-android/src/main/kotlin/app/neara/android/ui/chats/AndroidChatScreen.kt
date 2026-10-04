@@ -7,6 +7,7 @@ package app.neara.android.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -45,6 +46,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -52,11 +55,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
-import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.content.ContextCompat
 import app.neara.android.AndroidAppState
 import app.neara.android.AndroidTab
@@ -883,6 +885,37 @@ private fun LocationPickerDialog(
     onSendLocation: (lat: Double, lon: Double) -> Unit
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val activity = context as? Activity
+    val localView = LocalView.current
+
+    // Reliable calculation of actual status bar and navigation bar insets
+    val rootInsets = remember(localView) {
+        activity?.window?.decorView?.let { ViewCompat.getRootWindowInsets(it) }
+            ?: ViewCompat.getRootWindowInsets(localView)
+    }
+
+    val statusBarHeightDp = remember(rootInsets, density) {
+        val px = rootInsets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        var dpVal = with(density) { px.toDp() }
+        if (dpVal <= 0.dp) {
+            val resId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resId > 0) dpVal = with(density) { context.resources.getDimensionPixelSize(resId).toDp() }
+            if (dpVal <= 0.dp) dpVal = 36.dp
+        }
+        dpVal
+    }
+
+    val navBarHeightDp = remember(rootInsets, density) {
+        val px = rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+        var dpVal = with(density) { px.toDp() }
+        if (dpVal <= 0.dp) {
+            val resId = context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+            if (resId > 0) dpVal = with(density) { context.resources.getDimensionPixelSize(resId).toDp() }
+            if (dpVal <= 0.dp) dpVal = 48.dp
+        }
+        dpVal
+    }
 
     // Get current GPS location as starting point
     var pickedLat by remember { mutableStateOf(23.8103) }
@@ -916,21 +949,8 @@ private fun LocationPickerDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        val view = LocalView.current
-        SideEffect {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            if (window != null) {
-                WindowCompat.setDecorFitsSystemWindows(window, false)
-                window.statusBarColor = android.graphics.Color.TRANSPARENT
-                window.navigationBarColor = android.graphics.Color.TRANSPARENT
-            }
-        }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1009,8 +1029,8 @@ private fun LocationPickerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(BgDark.copy(alpha = 0.95f))
-                    .statusBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                    .padding(top = statusBarHeightDp)
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
                     .align(Alignment.TopCenter),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1066,8 +1086,12 @@ private fun LocationPickerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 28.dp)
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = navBarHeightDp + 20.dp
+                    )
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFF1A1F2E))
                     .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(20.dp))
@@ -1094,13 +1118,13 @@ private fun LocationPickerDialog(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 "Selected Location",
-                                color = TextPrimary,
+                                color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
                             Text(
                                 "${String.format("%.6f", pickedLat)}, ${String.format("%.6f", pickedLon)}",
-                                color = TextSecondary,
+                                color = Color(0xFF94A3B8),
                                 fontSize = 11.sp
                             )
                         }
