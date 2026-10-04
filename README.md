@@ -82,7 +82,7 @@ Neara is structured into clean, decoupled multiplatform modules:
 
 ## 👨‍💻 Author
 
-- **Developer**: Tuhin
+- **Developer**: Tuhinx
 - **GitHub**: [@tuhinxbd](https://github.com/tuhinxbd)
 - **Repository**: [https://github.com/tuhinxbd/Neara](https://github.com/tuhinxbd/Neara)
 
