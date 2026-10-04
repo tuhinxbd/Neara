@@ -992,7 +992,8 @@ private fun LocationPickerDialog(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(BgDark.copy(alpha = 0.9f))
+                    .background(BgDark.copy(alpha = 0.95f))
+                    .statusBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 10.dp)
                     .align(Alignment.TopCenter),
                 verticalAlignment = Alignment.CenterVertically
@@ -1049,7 +1050,8 @@ private fun LocationPickerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(12.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 14.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color(0xFF1A1F2E))
                     .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(18.dp))
