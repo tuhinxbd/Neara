@@ -19,6 +19,7 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
+import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -63,7 +64,7 @@ import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import kotlin.math.cos
 import kotlin.math.sin
 
-@SuppressLint("MissingPermission")
+@SuppressLint("MissingPermission", "ClickableViewAccessibility")
 @Composable
 fun AndroidMapScreen(appState: AndroidAppState) {
     val context = LocalContext.current
@@ -180,7 +181,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                     }
                 }
 
-                // Register fast high-accuracy location listener
+                // Register fast high-accuracy location listener on Main Looper
                 if (lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
                     lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1.0f, listener, Looper.getMainLooper())
                 }
@@ -202,7 +203,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BgDark)) {
-        // Native OpenStreetMap View with Real Location Tracking
+        // Native OpenStreetMap View - Fully movable and pinchable
         AndroidView(
             factory = { ctx ->
                 Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
@@ -212,10 +213,26 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true
+                    isClickable = true
+                    isFocusable = true
+
+                    // Enable free dragging and disallow parent interception
+                    setOnTouchListener { v, event ->
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                                v.parent?.requestDisallowInterceptTouchEvent(true)
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                v.parent?.requestDisallowInterceptTouchEvent(false)
+                            }
+                        }
+                        false
+                    }
+
                     controller.setZoom(17.0)
                     controller.setCenter(userGeoPoint)
 
-                    // Real-time GPS overlay provider
+                    // Real-time GPS overlay provider (without locking pan/drag)
                     val gpsProvider = GpsMyLocationProvider(ctx).apply {
                         locationUpdateMinTime = 1000L
                         locationUpdateMinDistance = 1.0f
@@ -307,47 +324,47 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Top Status & Warning Banners
+        // Top Status & Warning Banners - Positioned high up
         Column(
             modifier = Modifier
-                .statusBarsPadding()
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(top = 8.dp, start = 12.dp, end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Warning 1: Phone Location (GPS) is turned OFF
             if (!isPhoneLocationOn) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                     border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.8f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.LocationOff,
                             contentDescription = null,
                             tint = Color(0xFFF59E0B),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Phone Location is OFF", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Turn on GPS for live real location tracking", color = TextSecondary, fontSize = 11.sp)
-                        }
                         Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Phone Location is OFF", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Turn on GPS for live real tracking", color = TextSecondary, fontSize = 10.sp)
+                        }
+                        Spacer(Modifier.width(6.dp))
                         Button(
                             onClick = {
                                 context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                         ) {
-                            Text("Turn On", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Turn On", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
@@ -357,26 +374,26 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             if (!hasLocationPermission) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                     border = BorderStroke(1.dp, AccentDanger.copy(alpha = 0.8f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Security,
                             contentDescription = null,
                             tint = AccentDanger,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Location Permission Needed", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Allow location permission to show your position", color = TextSecondary, fontSize = 11.sp)
-                        }
                         Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Location Permission Needed", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Allow permission to show position", color = TextSecondary, fontSize = 10.sp)
+                        }
+                        Spacer(Modifier.width(6.dp))
                         Button(
                             onClick = {
                                 permissionLauncher.launch(
@@ -388,27 +405,27 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = AccentDanger),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                         ) {
-                            Text("Allow", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Allow", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
             }
 
-            // Floating Header Badges
+            // Top Badges: GPS Real Location & Active Nodes
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Free OpenStreetMap / GPS Status Badge
+                // GPS Real Location Badge
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(BgCard.copy(alpha = 0.92f))
                         .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -417,9 +434,9 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                                 .clip(CircleShape)
                                 .background(if (isRealLocationAcquired) AccentEmerald else Color(0xFFF59E0B))
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(7.dp))
                         Text(
-                            if (isRealLocationAcquired) "🛰️ GPS Real Location" else "🗺️ OpenStreetMap (Free)",
+                            if (isRealLocationAcquired) "🛰️ GPS Real Location" else "🗺️ OpenStreetMap",
                             color = TextPrimary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -427,20 +444,20 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                     }
                 }
 
-                // Peers Count Badge
+                // Active Nodes Badge
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(BgCard.copy(alpha = 0.92f))
                         .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.WifiTethering,
                             contentDescription = null,
                             tint = AccentCyan,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
@@ -454,66 +471,14 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             }
         }
 
-        // Floating Action Buttons (Right HUD)
+        // Top-Right Side Quick Controls (Theme & Radar rings)
         Column(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .align(Alignment.TopEnd)
+                .padding(top = 56.dp, end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // GPS Center on Real Location
-            FloatingMapButton(
-                icon = Icons.Default.MyLocation,
-                contentDescription = "Center on Real Location",
-                tint = if (isRealLocationAcquired) AccentEmerald else Color(0xFFF59E0B),
-                onClick = {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-                    val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
-                    val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
-                    if (!gps && !net) {
-                        // Prompt user to turn on GPS in settings
-                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                    } else {
-                        // Immediately fetch fresh last known location
-                        var freshLoc: Location? = null
-                        for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
-                            try {
-                                val l = lm?.getLastKnownLocation(p)
-                                if (l != null && (freshLoc == null || l.time > freshLoc.time)) {
-                                    freshLoc = l
-                                }
-                            } catch (e: Exception) {}
-                        }
-                        freshLoc?.let {
-                            userGeoPoint = GeoPoint(it.latitude, it.longitude)
-                            isRealLocationAcquired = true
-                        }
-                        mapViewInstance?.controller?.animateTo(userGeoPoint, 17.5, 900L)
-                    }
-                }
-            )
-
-            // Zoom In
-            FloatingMapButton(
-                icon = Icons.Default.Add,
-                contentDescription = "Zoom In",
-                tint = TextPrimary,
-                onClick = {
-                    mapViewInstance?.controller?.zoomIn()
-                }
-            )
-
-            // Zoom Out
-            FloatingMapButton(
-                icon = Icons.Default.Remove,
-                contentDescription = "Zoom Out",
-                tint = TextPrimary,
-                onClick = {
-                    mapViewInstance?.controller?.zoomOut()
-                }
-            )
-
             // Toggle Dark / Standard Map
             FloatingMapButton(
                 icon = if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
@@ -552,12 +517,74 @@ fun AndroidMapScreen(appState: AndroidAppState) {
             )
         }
 
+        // Bottom-Right Corner Action Controls: MyLocation, +, -
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(
+                    end = 14.dp,
+                    bottom = if (selectedPeer != null) 165.dp else if (discoveredPeers.isNotEmpty()) 95.dp else 16.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // GPS Center on Real Location
+            FloatingMapButton(
+                icon = Icons.Default.MyLocation,
+                contentDescription = "Center on Real Location",
+                tint = if (isRealLocationAcquired) AccentEmerald else Color(0xFFF59E0B),
+                onClick = {
+                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                    val gps = lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+                    val net = lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+                    if (!gps && !net) {
+                        context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    } else {
+                        var freshLoc: Location? = null
+                        for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
+                            try {
+                                val l = lm?.getLastKnownLocation(p)
+                                if (l != null && (freshLoc == null || l.time > freshLoc.time)) {
+                                    freshLoc = l
+                                }
+                            } catch (e: Exception) {}
+                        }
+                        freshLoc?.let {
+                            userGeoPoint = GeoPoint(it.latitude, it.longitude)
+                            isRealLocationAcquired = true
+                        }
+                        mapViewInstance?.controller?.animateTo(userGeoPoint, 17.5, 800L)
+                    }
+                }
+            )
+
+            // Zoom In (+)
+            FloatingMapButton(
+                icon = Icons.Default.Add,
+                contentDescription = "Zoom In",
+                tint = TextPrimary,
+                onClick = {
+                    mapViewInstance?.controller?.zoomIn()
+                }
+            )
+
+            // Zoom Out (-)
+            FloatingMapButton(
+                icon = Icons.Default.Remove,
+                contentDescription = "Zoom Out",
+                tint = TextPrimary,
+                onClick = {
+                    mapViewInstance?.controller?.zoomOut()
+                }
+            )
+        }
+
         // Bottom Selected Peer Card OR Nodes Carousel
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(bottom = 12.dp, start = 14.dp, end = 14.dp)
+                .padding(bottom = 12.dp, start = 12.dp, end = 12.dp)
         ) {
             val peer = selectedPeer
             if (peer != null) {
@@ -570,7 +597,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                     colors = CardDefaults.cardColors(containerColor = BgCard),
                     border = BorderStroke(1.dp, AccentEmerald.copy(alpha = 0.5f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -579,7 +606,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(42.dp)
+                                        .size(38.dp)
                                         .clip(CircleShape)
                                         .background(AccentEmerald.copy(alpha = 0.2f))
                                         .border(1.5.dp, AccentEmerald, CircleShape),
@@ -589,21 +616,21 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                                         peer.displayName.take(1).uppercase(),
                                         color = AccentEmerald,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
+                                        fontSize = 15.sp
                                     )
                                 }
-                                Spacer(Modifier.width(12.dp))
+                                Spacer(Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         peer.displayName,
                                         color = TextPrimary,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp
+                                        fontSize = 14.sp
                                     )
                                     Text(
                                         "Node IP: ${peer.ipAddress}:${peer.port}",
                                         color = TextSecondary,
-                                        fontSize = 12.sp
+                                        fontSize = 11.sp
                                     )
                                 }
                             }
@@ -612,7 +639,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                             }
                         }
 
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(10.dp))
 
                         // Quick Actions
                         Row(
@@ -623,49 +650,51 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                                 onClick = {
                                     appState.selectConversation(peer)
                                 },
-                                modifier = Modifier.weight(1f).height(40.dp),
+                                modifier = Modifier.weight(1f).height(38.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentEmerald)
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.Black)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Chat", color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Text("Chat", color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             }
 
                             Button(
                                 onClick = {
                                     appState.startVoiceCall(peer, peer.peerId)
                                 },
-                                modifier = Modifier.weight(1f).height(40.dp),
+                                modifier = Modifier.weight(1f).height(38.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
                             ) {
-                                Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                                Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.Black)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Call", color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Text("Call", color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             }
                         }
                     }
                 }
             } else if (discoveredPeers.isNotEmpty()) {
-                // Bottom Nodes Pill Carousel
+                // Bottom Nodes Pill Carousel (Leaves right gap for buttons)
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 56.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = BgCard.copy(alpha = 0.95f)),
                     border = BorderStroke(1.dp, BorderSubtle)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Nearby Mesh Nodes", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Tap pin or node to connect", color = TextMuted, fontSize = 11.sp)
+                            Text("Nearby Mesh Nodes", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Tap to connect", color = TextMuted, fontSize = 10.sp)
                         }
 
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
 
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -680,12 +709,12 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                                             selectedPeer = p
                                             mapViewInstance?.controller?.animateTo(userGeoPoint, 17.0, 800L)
                                         }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(
                                             modifier = Modifier
-                                                .size(20.dp)
+                                                .size(18.dp)
                                                 .clip(CircleShape)
                                                 .background(AccentEmerald.copy(alpha = 0.2f)),
                                             contentAlignment = Alignment.Center
@@ -693,7 +722,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                                             Text(
                                                 p.displayName.take(1).uppercase(),
                                                 color = AccentEmerald,
-                                                fontSize = 10.sp,
+                                                fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
@@ -701,7 +730,7 @@ fun AndroidMapScreen(appState: AndroidAppState) {
                                         Text(
                                             p.displayName,
                                             color = TextPrimary,
-                                            fontSize = 12.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -726,7 +755,7 @@ fun FloatingMapButton(
 ) {
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(42.dp)
             .shadow(6.dp, CircleShape)
             .clip(CircleShape)
             .background(BgCard.copy(alpha = 0.95f))
@@ -738,7 +767,7 @@ fun FloatingMapButton(
             icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(19.dp)
         )
     }
 }
