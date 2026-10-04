@@ -1,70 +1,100 @@
-# Neara (Offline Nearby Communication App)
-
-Neara is a production-quality, Internet-independent local communication application built in Kotlin. It allows users to discover nearby devices, chat 1-on-1 and in groups, create public and private networks with QR code invitations, transfer files in chunks, stream push-to-talk audio, and route packets over peer-to-peer mesh—all without requiring any Internet connection.
+<p align="center">
+  <h1 align="center">Neara</h1>
+  <p align="center">
+    <strong>Offline-First Peer-to-Peer Mesh Communication Platform</strong><br>
+    Pure local Wi-Fi, Hotspot & LAN • End-to-End Encrypted • No Internet Required
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
+    <img src="https://img.shields.io/badge/Platform-Android%20%7C%20Desktop-059669" alt="Platform">
+    <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
+    <img src="https://img.shields.io/badge/Encryption-Ed25519%20%2B%20ChaCha20-0284C7" alt="Encryption">
+    <img src="https://img.shields.io/badge/License-Non--Commercial-orange" alt="License">
+  </p>
+</p>
 
 ---
 
-## 🏛 Architecture & Project Structure
+## 📌 Overview
 
-The project is structured into 8 modular Kotlin components following Clean Architecture:
+**Neara** is an internet-independent, peer-to-peer communication application engineered in Kotlin. It enables nearby devices to discover one another automatically, exchange end-to-end encrypted messages, make voice & video calls, record voice messages, and transfer files over local Wi-Fi, Hotspots, or Wi-Fi Direct—completely independent of cellular data, cloud servers, or external infrastructure.
 
-| Module | Purpose |
+---
+
+## ✨ Key Features
+
+- 💬 **Direct & Group Messaging** — Chat 1-on-1 or create public & private channels with instant delivery receipts (`Sent`, `Delivered`, `Read`), message reactions, and swipeable conversation controls.
+- 📞 **Voice & Video Calling** — Crystal-clear peer-to-peer audio and video calls over local Wi-Fi/LAN with interactive call history cards and full-screen call management.
+- 🎙️ **Voice Notes** — Push-to-record voice audio clips featuring symmetrical waveform playback visualization.
+- 📷 **High-Speed Media Sharing** — Share photos and files directly device-to-device at full Wi-Fi speeds using chunked transfer.
+- 📡 **Instant Nearby Radar Discovery** — Zero-configuration UDP multicast discovery on local subnets without cumbersome pairing.
+- 🛡️ **Military-Grade Cryptography** — Every packet is authenticated and encrypted:
+  - **Ed25519** digital signatures for identity verification
+  - **X25519** ephemeral ECDH key agreement
+  - **ChaCha20-Poly1305** AEAD symmetric encryption
+  - **HKDF** session key derivation
+- 🔄 **Mesh Routing Engine** — Multi-hop packet forwarding with duplicate suppression, TTL hop limits, and loop protection to bridge devices out of direct range.
+- 📬 **Offline Queue** — Automatic local SQLite queueing when a recipient is away, auto-drained when they reconnect.
+
+---
+
+## 🏗 Architecture & Modules
+
+Neara is structured into clean, decoupled multiplatform modules:
+
+| Module | Description |
 | :--- | :--- |
-| [neara-core](file:///i:/Kotlin/Neara/neara-core) | Domain models (`Peer`, `ChatMessage`, `Network`, `FileMetadata`), enums, and core abstraction interfaces (`DiscoveryProvider`, `TransportProvider`, `PeerManager`, `EncryptionManager`, `MeshRouter`). |
-| [neara-crypto](file:///i:/Kotlin/Neara/neara-crypto) | Industrial cryptography engine with **Ed25519** digital signatures & identity, **X25519** Diffie-Hellman key agreement, **HKDF** key derivation, and **ChaCha20-Poly1305** AEAD encryption. Zero hardcoded keys. |
-| [neara-protocol](file:///i:/Kotlin/Neara/neara-protocol) | Binary wire framing protocol with magic bytes `[0x4E, 0x45, 0x41, 0x52]`, packet versioning, payload lengths, and frame codec for TCP/UDP streams. |
-| [neara-discovery](file:///i:/Kotlin/Neara/neara-discovery) | Local UDP multicast discovery engine on `239.255.60.60:45780`, heartbeat sweep, peer timeouts, presence states (`PeerFound`, `PeerUpdated`, `PeerLost`), and visible/invisible toggle. |
-| [neara-transport](file:///i:/Kotlin/Neara/neara-transport) | Low-latency TCP framed socket server and client (`TcpTransportProvider`), peer connection pooling, and frame streams. |
-| [neara-storage](file:///i:/Kotlin/Neara/neara-storage) | SQLite local-first message and peer persistence with `OfflineQueueManager` (automatic queueing when peer is offline and draining upon reconnection). |
-| [neara-service](file:///i:/Kotlin/Neara/neara-service) | High-level application services: `ChatService`, `NetworkManager` (public/private networks & QR codes), `MeshRouterImpl` (multi-hop routing, loop prevention, TTL, duplicate suppression), `FileTransferService`, and `VoiceService` (PTT audio). |
-| [neara-desktop](file:///i:/Kotlin/Neara/neara-desktop) | Compose Multiplatform desktop UI featuring 5 tabs (`Nearby`, `Chats`, `Networks`, `Files`, `Profile`), live "Local mode active" banner, message bubble ticks, PTT controls, and QR code rendering. |
+| **`neara-android`** | Jetpack Compose Android client with modern Messenger-style UI, calls, and animated splash screen. |
+| **`neara-desktop`** | Compose Multiplatform desktop application for Windows, macOS, and Linux. |
+| **`neara-core`** | Domain models (`Peer`, `ChatMessage`, `Network`), interfaces, and business entities. |
+| **`neara-crypto`** | Industrial cryptography engine with zero hardcoded keys. |
+| **`neara-protocol`** | Binary wire framing protocol with packet versioning and stream codecs. |
+| **`neara-discovery`** | UDP multicast discovery, peer presence detection, and heartbeat sweeps. |
+| **`neara-transport`** | Low-latency TCP framed socket server and client connection pooling. |
+| **`neara-storage`** | Local-first message persistence and offline delivery queue. |
+| **`neara-service`** | Application orchestrator: `ChatService`, `NetworkManager`, `VoiceService`, and `MeshRouter`. |
 
 ---
 
-## 🚀 Running the Application
+## 🚀 Building & Running
 
-### 1. Launch the Desktop App
-```powershell
-.\gradlew.bat :neara-desktop:run
+### Prerequisites
+- JDK 21 or higher
+- Android SDK (for Android build)
+
+### Build Android APK
+```bash
+./gradlew :neara-android:assembleDebug
+```
+*The generated APK will be available at:* `neara-android/build/outputs/apk/debug/neara-android-debug.apk`
+
+### Run Desktop Application
+```bash
+./gradlew :neara-desktop:run
 ```
 
-### 2. Run All Unit & Integration Tests
-```powershell
-.\gradlew.bat test
-```
-
-### 3. Build & Assemble All Modules
-```powershell
-.\gradlew.bat assemble
+### Run Tests
+```bash
+./gradlew test
 ```
 
 ---
 
-## 🔒 Security & Privacy Highlights
-
-- **Zero Plaintext Transmission**: All messages are signed with Ed25519 and encrypted using ephemeral X25519 ECDH + ChaCha20-Poly1305 AEAD.
-- **Offline First**: If a destination peer goes offline, messages are stored in SQLite and automatically delivered with retry logic when the peer reappears on the local network.
-- **Privacy Controls**: Users can toggle between `Visible` and `Invisible (Silent)` discovery modes anytime.
-- **Secure QR Codes**: QR codes contain only minimal public key fingerprints and rendezvous metadata (`neara://join?netId=...`), never transmitting raw passwords or master keys over plaintext.
-
----
-
-## 👨‍💻 Author & Maintainer
+## 👨‍💻 Author
 
 - **Developer**: Tuhin
 - **GitHub**: [@tuhinxbd](https://github.com/tuhinxbd)
-- **Project Repository**: [https://github.com/tuhinxbd/Neara](https://github.com/tuhinxbd/Neara)
+- **Repository**: [https://github.com/tuhinxbd/Neara](https://github.com/tuhinxbd/Neara)
 
 ---
 
-## 📄 License & Restrictions
+## 📄 License & Terms
 
-This software is licensed under the **Neara Source-Available Non-Commercial & Attribution License**.
+Neara is distributed under the **Neara Source-Available Non-Commercial & Attribution License**.
 
-- ❌ **No Commercial Use / No Selling**: You may **NOT** sell, rent, monetize, or charge any fee for this software, compiled APKs/binaries, or any derivative works.
-- ❌ **No Rebranding as Original**: You may **NOT** remove or alter the author's name (**Tuhin / tuhinxbd**) or claim this project as your own creation.
-- ⚖️ **Mandatory Attribution**: All forks, copies, and modifications must clearly state original authorship and link back to [https://github.com/tuhinxbd/Neara](https://github.com/tuhinxbd/Neara).
-- 🔄 **ShareAlike**: Modified versions must carry the exact same license terms.
+- ❌ **No Selling / No Commercial Use**: Strictly prohibited from selling, renting, licensing, or commercializing this software or its binaries.
+- ❌ **No Rebranding**: You may not remove or alter original author credits or claim this project as your own creation.
+- ⚖️ **Mandatory Attribution**: All forks or derived works must visibly credit original authorship and link back to this repository.
+- 🔄 **ShareAlike**: Modified versions must carry the identical license terms.
 
-See the full [LICENSE](LICENSE) file for complete legal terms.
-
+See the complete terms in the [LICENSE](LICENSE) file.
