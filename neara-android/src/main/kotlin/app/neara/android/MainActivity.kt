@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import app.neara.android.call.*
 import app.neara.android.ui.*
+import app.neara.android.ui.map.AndroidMapScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -142,6 +143,7 @@ fun NearaMobileApp(appState: AndroidAppState) {
         AndroidTab.CHATS -> TabBarConfig("Neara", Icons.Default.NearMe, AccentEmerald)
         AndroidTab.NEARBY -> TabBarConfig("Nearby", Icons.Default.Radar, AccentEmerald)
         AndroidTab.NETWORKS -> TabBarConfig("Networks", Icons.Default.Hub, AccentIndigo)
+        AndroidTab.MAP -> TabBarConfig("Offline Map", Icons.Default.Map, AccentEmerald)
         AndroidTab.PROFILE -> TabBarConfig("My Identity", Icons.Default.PersonOutline, AccentEmerald)
         AndroidTab.SETTINGS -> TabBarConfig("Settings", Icons.Default.Settings, TextSecondary)
         AndroidTab.FILES -> TabBarConfig("Files", Icons.Default.FolderShared, AccentEmerald)
@@ -387,6 +389,7 @@ fun NearaMobileApp(appState: AndroidAppState) {
                     AndroidTab.CHATS -> AndroidChatScreen(appState)
                     AndroidTab.NEARBY -> AndroidNearbyScreen(appState)
                     AndroidTab.NETWORKS -> AndroidNetworksScreen(appState)
+                    AndroidTab.MAP -> AndroidMapScreen(appState)
                     AndroidTab.FILES -> AndroidNearbyScreen(appState)
                     AndroidTab.PROFILE -> AndroidProfileScreen(appState)
                     AndroidTab.SETTINGS -> AndroidSettingsScreen(appState)
@@ -438,7 +441,7 @@ fun NearaBottomNavBar(
                     Triple(AndroidTab.CHATS, Icons.Default.ChatBubbleOutline, "Chats"),
                     Triple(AndroidTab.NEARBY, Icons.Default.Radar, "Nearby"),
                     Triple(AndroidTab.NETWORKS, Icons.Default.Hub, "Networks"),
-                    Triple(AndroidTab.PROFILE, Icons.Default.PersonOutline, "Profile"),
+                    Triple(AndroidTab.MAP, Icons.Default.Map, "Map"),
                     Triple(AndroidTab.SETTINGS, Icons.Default.Settings, "Settings")
                 )
 

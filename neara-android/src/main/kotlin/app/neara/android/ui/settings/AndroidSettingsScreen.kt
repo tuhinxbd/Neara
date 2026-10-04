@@ -75,9 +75,13 @@ fun AndroidSettingsScreen(appState: AndroidAppState) {
     val meshRelay by appState.meshRelayEnabled.collectAsState()
     val autoAccept by appState.autoAcceptFiles.collectAsState()
     val offlineCount by appState.offlinePendingCount.collectAsState()
+    val context = LocalContext.current
     var showClearHistoryDialog by remember { mutableStateOf(false) }
     var showPurgeQueueDialog by remember { mutableStateOf(false) }
     var statusFeedback by remember { mutableStateOf<String?>(null) }
+    var showProfileModal by remember { mutableStateOf(false) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var newDisplayName by remember(appState.localPeer.displayName) { mutableStateOf(appState.localPeer.displayName) }
 
     LazyColumn(
         modifier = Modifier
@@ -108,6 +112,81 @@ fun AndroidSettingsScreen(appState: AndroidAppState) {
                         .padding(12.dp)
                 ) {
                     Text(statusFeedback ?: "", color = AccentEmerald, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+
+        // Section 0: User Profile & Cryptographic Identity
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showProfileModal = true },
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = BgCard),
+                border = BorderStroke(1.dp, BorderSubtle)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(AccentEmerald.copy(alpha = 0.18f))
+                            .border(1.5.dp, AccentEmerald, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            appState.localPeer.displayName.take(1).uppercase(),
+                            color = AccentEmerald,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+                    }
+
+                    Spacer(Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                appState.localPeer.displayName,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(AccentEmerald.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("Online", color = AccentEmerald, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            "ID: ${appState.localPeerId.take(16)}...",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            "Profile, Keys & Cryptography",
+                            color = AccentCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = "Profile Details",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }
@@ -412,6 +491,224 @@ fun AndroidSettingsScreen(appState: AndroidAppState) {
             dismissButton = {
                 TextButton(onClick = { showPurgeQueueDialog = false }) {
                     Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = BgCard
+        )
+    }
+
+    // Full Profile & Cryptography Modal
+    if (showProfileModal) {
+        Dialog(
+            onDismissRequest = { showProfileModal = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BgDark)
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
+                color = BgDark
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { showProfileModal = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Profile & Cryptography",
+                            color = TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Profile Identity Card
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(BgCard)
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(CircleShape)
+                                .background(AccentEmerald.copy(alpha = 0.15f))
+                                .border(2.dp, AccentEmerald, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                appState.localPeer.displayName.take(1).uppercase(),
+                                color = AccentEmerald,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 32.sp
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                appState.localPeer.displayName,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { showEditNameDialog = true },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Name", tint = AccentEmerald, modifier = Modifier.size(16.dp))
+                            }
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+                        Text("Peer ID: ${appState.localPeerId}", color = TextSecondary, fontSize = 12.sp)
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // QR Code representation
+                        val qrBitmap = remember(appState.localPeer.publicKeyHex) {
+                            try {
+                                generateAndroidQrBitmap("neara://${appState.localPeerId}:${appState.localPeer.publicKeyHex}")
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        if (qrBitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(160.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White)
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Identity QR Code",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text("Scan to verify cryptographic identity", color = TextMuted, fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Public Key & Endpoints
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(BgCard)
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
+                            .padding(16.dp)
+                    ) {
+                        Text("Cryptographic Details", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(Modifier.height(12.dp))
+
+                        // Ed25519 Public Key
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Ed25519 Signing Public Key:", color = TextMuted, fontSize = 11.sp)
+                                Text(
+                                    appState.localPeer.publicKeyHex,
+                                    color = AccentCyan,
+                                    fontSize = 11.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cb.setPrimaryClip(ClipData.newPlainText("Neara Public Key", appState.localPeer.publicKeyHex))
+                                    Toast.makeText(context, "Public key copied!", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = AccentEmerald, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        HorizontalDivider(color = BorderSubtle, modifier = Modifier.padding(vertical = 12.dp))
+
+                        Text("Transport Endpoints", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text("• Local IP: ${appState.localIpAddress}", color = TextSecondary, fontSize = 12.sp)
+                        Text("• TCP Port: ${appState.localPort}", color = TextSecondary, fontSize = 12.sp)
+                        Text("• UDP Discovery: 239.255.60.60:45780", color = TextSecondary, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    // Edit Display Name Dialog
+    if (showEditNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = false },
+            title = { Text("Edit Display Name", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newDisplayName,
+                    onValueChange = { newDisplayName = it },
+                    label = { Text("Display Name") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = AccentEmerald,
+                        unfocusedBorderColor = BorderSubtle
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = newDisplayName.trim()
+                        if (trimmed.isNotEmpty()) {
+                            appState.localPeer = appState.localPeer.copy(displayName = trimmed)
+                            context.getSharedPreferences("neara_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("display_name", trimmed)
+                                .apply()
+                            appState.refreshConversations()
+                        }
+                        showEditNameDialog = false
+                    }
+                ) {
+                    Text("Save", color = AccentEmerald, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }) {
+                    Text("Cancel", color = TextMuted)
                 }
             },
             containerColor = BgCard

@@ -38,6 +38,7 @@ enum class AndroidTab {
     CHATS,
     NEARBY,
     NETWORKS,
+    MAP,
     FILES,
     PROFILE,
     SETTINGS
@@ -132,7 +133,7 @@ class AndroidAppState(
     }
     val localPort = 45781
 
-    val localPeer = Peer(
+    var localPeer = Peer(
         peerId = localPeerId,
         displayName = cryptoEngine.localIdentity.displayName,
         avatarId = "avatar_android",

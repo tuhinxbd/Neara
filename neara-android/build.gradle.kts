@@ -59,4 +59,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.google.zxing:core:3.5.3")
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 }
