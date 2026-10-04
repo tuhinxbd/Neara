@@ -76,6 +76,34 @@ fun AndroidMessageBubble(
     senderName: String,
     appState: AndroidAppState
 ) {
+    val isSystemEvent = (msg.type == MessageType.SYSTEM || msg.payload.startsWith("EVENT:") || msg.payload.startsWith("SYS_EVENT:")) && !msg.payload.startsWith("CALL_LOG:")
+    if (isSystemEvent) {
+        val eventText = remember(msg.payload) {
+            when {
+                msg.payload.startsWith("EVENT:") -> msg.payload.removePrefix("EVENT:")
+                msg.payload.startsWith("SYS_EVENT:") -> msg.payload.removePrefix("SYS_EVENT:")
+                else -> msg.payload
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp, horizontal = 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = eventText,
+                color = Color(0xFF8E8E93),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 16.sp
+            )
+        }
+        return
+    }
+
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
     val timeStr = timeFormat.format(Date(msg.timestamp))
@@ -775,31 +803,6 @@ fun AndroidMessageBubble(
                     ) {
                         Text(timeStr, color = TextMuted, fontSize = 10.sp)
                     }
-                }
-            } else if (msg.type == MessageType.SYSTEM || msg.payload.startsWith("EVENT:") || msg.payload.startsWith("SYS_EVENT:")) {
-                // Centered Messenger-style group membership event notice (Added / Joined / Left)
-                val eventText = remember(msg.payload) {
-                    when {
-                        msg.payload.startsWith("EVENT:") -> msg.payload.removePrefix("EVENT:")
-                        msg.payload.startsWith("SYS_EVENT:") -> msg.payload.removePrefix("SYS_EVENT:")
-                        else -> msg.payload
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp, horizontal = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = eventText,
-                        color = Color(0xFF8E8E93),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        lineHeight = 16.sp
-                    )
                 }
             } else {
                 // Standard Text Message Bubble
